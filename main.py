@@ -6,15 +6,20 @@ from dotenv import load_dotenv
 from pathlib import Path
 
 
-
 def fetch_dvmn_long_polling():
     headers = {
         'Authorization': f'Token {dvmn_auth_token}'
     }
-    dvmn_answer = requests.get(f'https://dvmn.org/api/long_polling/', headers=headers, timeout=5)
-    dvmn_answer.raise_for_status()
-    return dvmn_answer.json()
-    # return dvmn_answer.json()
+    timestamp_to_request = []
+    dvmn_answer = []
+
+    while True:
+        dvmn_answer = requests.get(f'https://dvmn.org/api/long_polling/', params=timestamp_to_request, headers=headers)
+        dvmn_answer.raise_for_status()
+        if dvmn_answer.ok:
+            timestamp_to_request = {'timestamp': str(dvmn_answer.json()['last_attempt_timestamp'])}
+        else:
+            timestamp_to_request = {'timestamp': str(dvmn_answer.json()['timestamp_to_request'])}
 
 
 if __name__ == '__main__':
