@@ -1,62 +1,78 @@
+import asyncio
 import os
-from pprint import pprint
 
 import requests
 from dotenv import load_dotenv
 from pathlib import Path
+
+from telebot.async_telebot import AsyncTeleBot
+from telebot import types
+
+env_path = Path('.') / '.env'
+load_dotenv(env_path)
+bot = AsyncTeleBot(os.getenv('TELEGRAM_TOKEN'))
+
+
+# Handle '/start' and '/help'
+@bot.message_handler(commands=['start'])
+async def start_message(_message):
+    name = _message.from_user.first_name
+    await bot.send_message(_message.chat.id, f'Привет! {name}️')
+
+
+@bot.message_handler(commands=['track'])
+async def button_message(_message):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    item1 = types.KeyboardButton('Начать отслеживание изменений')
+    markup.add(item1)
+    await bot.send_message(_message.chat.id, 'Выберите что вам надо', reply_markup=markup)
+
+
+@bot.message_handler(content_types='text')
+async def message_reply(message):
+    if message.text == "Начать отслеживание изменений":
+        await bot.send_message(message.chat.id, str(await_answer_from_dvmn()))
 
 
 def fetch_dvmn_long_polling():
     headers = {
         'Authorization': f'Token {dvmn_auth_token}'
     }
-    timestamp_to_request = []
+    timestamp_to_request = None
+    dvmn_answer_top = None
+    final_json = None
 
-    while True:
+    while dvmn_answer_top != 'last_attempt_timestamp':
         dvmn_answer = requests.get(f'https://dvmn.org/api/long_polling/', params=timestamp_to_request, headers=headers)
         dvmn_answer.raise_for_status()
         answer = dvmn_answer.json()
         if 'last_attempt_timestamp' in answer:
             timestamp_to_request = {'timestamp': str(answer['last_attempt_timestamp'])}
+            dvmn_answer_top = 'last_attempt_timestamp'
+            final_json = dvmn_answer.json()
         elif 'timestamp_to_request' in dvmn_answer.json():
             timestamp_to_request = {'timestamp': str(answer['timestamp_to_request'])}
+    lesson_url = final_json['new_attempts'][0]['lesson_url']
+    task_name = final_json['new_attempts'][0]['lesson_title']
+    if final_json['new_attempts'][0]['is_negative'] is True:
+        return f'Проверена работа: "{task_name}"\n\nК сожалению нашлись ошибки!\n\nСсылка на урок: {lesson_url}'
+    else:
+        return f'Проверена работа: "{task_name}"\n\nПреподавателю все понравилось, можно приступать к следующему уроку!\n\nСсылка на урок: {lesson_url}'
 
 
-
-'''
-Good Answer:
-
-{'last_attempt_timestamp': 1652811311.116004,
- 'new_attempts': [{'is_negative': True,
-                   'lesson_title': 'Отправляем уведомления о проверке работ',
-                   'lesson_url': 'https://dvmn.org/modules/chat-bots/lesson/devman-bot/',
-                   'submitted_at': '2022-05-17T21:15:11.116004+03:00',
-                   'timestamp': 1652811311.116004}],
- 'request_query': [],
- 'status': 'found'}
- 
- 
- Timeout Answer:
- {'request_query': [],
- 'status': 'timeout',
- 'timestamp_to_request': 1652811930.771743}
- 
-
-'''
-
-
-
-
-
-if __name__ == '__main__':
-    env_path = Path('.') / '.env'
-    load_dotenv(env_path)
-    dvmn_auth_token = os.getenv('DVMN_TOKEN')
-
+def await_answer_from_dvmn():
     while True:
         try:
-            print(fetch_dvmn_long_polling())
+            return fetch_dvmn_long_polling()
         except requests.exceptions.ReadTimeout:
             print('ReadTimeout')
         except requests.exceptions.ConnectionError:
             print('No Internet connection. Awaiting for internet connection...')
+
+
+if __name__ == '__main__':
+    dvmn_auth_token = os.getenv('DVMN_TOKEN')
+    asyncio.run(bot.polling())
+    # pprint(fetch_dvmn_long_polling())
+
+
