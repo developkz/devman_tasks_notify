@@ -1,3 +1,6 @@
 venv/
 .idea/
 .env
+flake8_results.txt
+flake_run.sh
+.flake8
