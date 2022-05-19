@@ -78,4 +78,5 @@ def await_answer_from_dvmn():
 
 if __name__ == '__main__':
     dvmn_auth_token = os.getenv('DVMN_TOKEN')
+    print('Бот запущен, перейдите  телеграм и выполните команду "/start"')
     asyncio.run(bot.polling())
